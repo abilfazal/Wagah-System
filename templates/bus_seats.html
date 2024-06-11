@@ -1,0 +1,15 @@
+<!-- bus_seats.html -->
+<h1>Bus {{ bus.bus_number }} Seats</h1>
+<table>
+    <tr>
+        {% for seat in seat_grid %}
+            <td>
+                {% if seat.booked %}
+                    <span style="color: red;">Booked</span>
+                {% else %}
+                    <input type="checkbox" name="seats" value="{{ seat.seat_number }}">
+                {% endif %}
+            </td>
+        {% endfor %}
+    </tr>
+</table>

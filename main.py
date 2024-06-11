@@ -188,106 +188,31 @@ async def update_phone(request: Request, its: int = Form(...), phone_number: str
     return templates.TemplateResponse("assign_sim.html", {"request": request, "master": master, "message": "Phone number updated successfully"})
 
 # Bus Booking 
-
 @app.get("/bus-booking/", response_class=HTMLResponse)
-async def get_bus_booking_form(request: Request, its: int = Query(None), db: Session = Depends(get_db)):
-    person = None
-    buses = db.query(Bus).all()  # Fetch all buses
-    search = its  # To display in the template if no person found
+async def get_bus_booking_form(request: Request, db: Session = Depends(get_db)):
+    buses = db.query(Bus).all()
+    booked_seats = db.query(BookingInfo.seat_number).filter(BookingInfo.bus_number == buses[0].bus_number).all()
+    booked_seats = set(booked_seats)
+    return templates.TemplateResponse("bus_booking.html", {"request": request, "buses": buses, "booked_seats": booked_seats})
 
-    if its:
-        person = db.query(Master).filter(Master.ITS == its).first()
+@app.post("/bus-booking/")
+async def post_bus_booking_form(request: Request, its: int, bus_number: int, seats: str, db: Session = Depends(get_db)):
+    seats = [int(seat) for seat in seats.split(",") if seat]
+    for seat in seats:
+        booking_info = BookingInfo(ITS=its, bus_number=bus_number, seat_number=seat)
+        db.add(booking_info)
+    db.commit()
+    return {"message": "Seats booked successfully"}
+
+@app.get("/bus-booking/{bus_number}", response_class=HTMLResponse)
+async def get_bus_seats(request: Request, bus_number: int, db: Session = Depends(get_db)):
+    bus = db.query(Bus).filter(Bus.bus_number == bus_number).first()
+    if not bus:
+        raise HTTPException(status_code=404, detail="Bus not found")
     
-    return templates.TemplateResponse("bus_booking.html", {"request": request, "person": person, "buses": buses, "search": search})
-
-from sqlalchemy.exc import IntegrityError
-
-@app.post("/book-bus/", response_class=HTMLResponse)
-async def post_book_bus(
-    request: Request,
-    its: int = Form(...),
-    bus_number: str = Form(...),
-    db: Session = Depends(get_db)
-):
-    try:
-        # Check if bus exists and fetch its details
-        bus = db.query(Bus).filter(Bus.bus_number == bus_number).first()
-        if not bus:
-            raise HTTPException(status_code=404, detail=f"Bus {bus_number} not found")
-
-        # Check if there are available seats
-        if bus.no_of_seats <= 0:
-            raise HTTPException(status_code=400, detail="No available seats for this bus")
-
-        # Fetch the next available seat number
-        booked_seats = db.query(BookingInfo.seat_number).filter(
-            BookingInfo.bus_number == bus_number
-        ).all()
-        booked_seats = [seat[0] for seat in booked_seats if seat[0] is not None]
-        next_seat_number = 1
-        while next_seat_number in booked_seats:
-            next_seat_number += 1
-
-        # Book the seat
-        new_booking = BookingInfo(
-            ITS=its,
-            Mode=1,  # assuming '1' represents 'bus' in your context
-            Issued=True,
-            Departed=False,
-            Self_Issued=True,
-            seat_number=next_seat_number,
-            bus_number=bus_number
-        )
-        db.add(new_booking)
-        db.commit()
-
-        # Decrement available seats
-        bus.no_of_seats -= 1
-        db.commit()
-
-        # Retrieve person and buses for template
-        person = db.query(Master).filter(Master.ITS == its).first()
-        buses = db.query(Bus).all()
-
-        return templates.TemplateResponse(
-            "bus_booking.html",
-            {
-                "request": request,
-                "person": person,
-                "buses": buses,
-                "error": "No available seats for this bus"  # Pass the error message here
-            },
-        )
-
-    except IntegrityError as e:
-        db.rollback()
-        person = db.query(Master).filter(Master.ITS == its).first()
-        buses = db.query(Bus).all()
-        return templates.TemplateResponse(
-            "bus_booking.html",
-            {
-                "request": request,
-                "person": person,
-                "buses": buses,
-                "form_error": "An error occurred while booking: Seat already booked, please try again."
-            },
-        )
-
-    except Exception as e:
-        db.rollback()
-        person = db.query(Master).filter(Master.ITS == its).first()
-        buses = db.query(Bus).all()
-        return templates.TemplateResponse(
-            "bus_booking.html",
-            {
-                "request": request,
-                "person": person,
-                "buses": buses,
-                "form_error": "An error occurred while booking, please try again."
-            },
-        )
-
-# View booking Info
+    booked_seats = db.query(BookingInfo.seat_number).filter(BookingInfo.bus_number == bus_number).all()
+    booked_seats = set(booked_seats)
+    return templates.TemplateResponse("bus_booking.html", {"request": request, "bus": bus, "booked_seats": booked_seats})
 
 # View booking Info
 from fastapi import Query
@@ -528,13 +453,63 @@ async def print_processed_masters(page: int = Form(...), db: Session = Depends(g
     if not processed_masters:
         raise HTTPException(status_code=400, detail="No processed masters found for printing")
 
-    # Render HTML for printing
-    html_content = "<h2>Selected Processed Masters</h2><ul>"
+    # Render HTML for printing with JavaScript to auto-open print dialog and redirect after printing
+    html_content = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Processed Masters</title>
+        <style>
+            @page {
+                size: landscape;
+            }
+        </style>
+        <script type="text/javascript">
+            window.onload = function() { 
+                window.print();
+                window.onafterprint = function() {
+                    window.location.href = "/";
+                };
+            }
+        </script>
+    </head>
+    <body>
+        <h2>Selected Processed Masters</h2>
+        <table border="1">
+            <tr>
+                <th>ITS</th>
+                <th>First Name</th>
+                <th>Middle Name</th>
+                <th>Last Name</th>
+                <th>Passport Number</th>
+                <th>Passport Expiry Date</th>
+                <th>Visa Number</th>
+                <th>Arrived</th>
+                <th>Timestamp</th>
+            </tr>
+    """
     for master in processed_masters:
-        html_content += f"<li>ITS: {master.ITS}, Name: {master.first_name} {master.last_name}</li>"
-    html_content += "</ul>"
+        html_content += f"""
+            <tr>
+                <td>{master.ITS}</td>
+                <td>{master.first_name}</td>
+                <td>{master.middle_name}</td>
+                <td>{master.last_name}</td>
+                <td>{master.passport_No}</td>
+                <td>{master.passport_Expiry}</td>
+                <td>{master.Visa_No}</td>
+                <td>{master.arrived}</td>
+                <td>{master.timestamp}</td>
+            </tr>
+        """
+    html_content += """
+        </table>
+    </body>
+    </html>
+    """
 
     return HTMLResponse(content=html_content)
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
