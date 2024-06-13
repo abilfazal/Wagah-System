@@ -1,30 +1,21 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Login</title>
-    <link rel="stylesheet" href="/static/login.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login Page</title>
+    <link rel="stylesheet" href="styles.css">
 </head>
-    <body>
-        <div class="container">
-        <h1>
-            Login
-        </h1>
-        <form method="post" action="/login/">
-            <label for="username">
-                Username:
-            </label>
-            <input type="text" id="username" name="username"><br>
-            <label for="password">
-                Password:
-            </label>
-            <input type="password" id="password" name="password"><br>
-            <button type="submit">
-                Login
-            </button>
-            {% if error %}
-                <p style="color: red;">{{ error }}</p>
-            {% endif %}
-        </form>
+<body>
+    <div class="login-container">
+        <div class="login-box">
+            <h1>Login</h1>
+            <form>
+                <input type="text" placeholder="Username" required>
+                <input type="password" placeholder="Password" required>
+                <button type="submit">Get info</button>
+            </form>
+        </div>
     </div>
-    </body>
+</body>
 </html>
